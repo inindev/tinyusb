@@ -645,6 +645,9 @@ static void process_set_config(tuh_xfer_t* xfer) {
         // Driver is mounted without report descriptor
         config_driver_mount_complete(daddr, idx, NULL, 0);
       } else {
+        // Clear buffer before fetch to prevent stale data leaking through
+        // if the transfer is short
+        memset(usbh_get_enum_buf(), 0, p_hid->report_desc_len);
         // Brief pause for LS devices behind hubs before descriptor fetch
         if (tuh_speed_get(daddr) == TUSB_SPEED_LOW) {
           tusb_time_delay_ms_api(4);
@@ -656,10 +659,36 @@ static void process_set_config(tuh_xfer_t* xfer) {
       break;
 
     case CONFIG_COMPLETE: {
-      uint8_t const* desc_report = usbh_get_enum_buf();
+      static uint8_t short_retry_count = 0;
+      static uint16_t best_len = 0;
+      uint8_t* enum_buf = usbh_get_enum_buf();
       uint16_t const desc_len = tu_le16toh(xfer->setup->wLength);
+      uint16_t const actual = xfer->actual_len;
 
-      config_driver_mount_complete(daddr, idx, desc_report, desc_len);
+      // Track best result -- descriptor is constant, so longer = better
+      if (actual > best_len) best_len = actual;
+
+      // Retry if transfer was short -- some devices need time after hub port reset
+      // Exponential backoff: 50, 100, 200, 400, 800ms
+      if (best_len < desc_len && short_retry_count < 5) {
+        short_retry_count++;
+        uint32_t delay = 50u << (short_retry_count - 1);
+        TU_LOG1("HID report descriptor short: got %u of %u bytes (best=%u), retry %u (%lums)\r\n",
+                actual, desc_len, best_len, short_retry_count, (unsigned long)delay);
+        tusb_time_delay_ms_api(delay);
+        tuh_descriptor_get_hid_report(daddr, p_hid->itf_num, p_hid->report_desc_type, 0,
+                                      enum_buf, p_hid->report_desc_len,
+                                      process_set_config, CONFIG_COMPLETE);
+        break;
+      }
+
+      uint16_t const use_len = (best_len < desc_len) ? best_len : desc_len;
+      if (best_len < desc_len) {
+        TU_LOG1("HID report descriptor short after retries: best %u of %u bytes\r\n", best_len, desc_len);
+      }
+      short_retry_count = 0;
+      best_len = 0;
+      config_driver_mount_complete(daddr, idx, enum_buf, use_len);
       break;
     }
 
