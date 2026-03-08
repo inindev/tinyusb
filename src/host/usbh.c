@@ -1806,7 +1806,13 @@ static bool _parse_configuration_descriptor(uint8_t dev_addr, tusb_desc_configur
       //          desc_iad->bFunctionClass  == desc_itf->bInterfaceClass);
     }
 
-    TU_ASSERT( TUSB_DESC_INTERFACE == tu_desc_type(p_desc) );
+    // Corrupted config descriptors may have unexpected descriptor types here.
+    // Skip rather than assert to allow remaining interfaces to be parsed.
+    if ( TUSB_DESC_INTERFACE != tu_desc_type(p_desc) ) {
+      TU_LOG1("Config parse: expected Interface descriptor, got 0x%02X -- skipping\r\n", tu_desc_type(p_desc));
+      p_desc = tu_desc_next(p_desc);
+      continue;
+    }
     tusb_desc_interface_t const* desc_itf = (tusb_desc_interface_t const*) p_desc;
 
 #if CFG_TUH_MIDI
