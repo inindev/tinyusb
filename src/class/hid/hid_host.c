@@ -523,7 +523,8 @@ uint16_t hidh_open(uint8_t rhport, uint8_t daddr, const tusb_desc_interface_t *d
   // len = interface + hid + n*endpoints
   const uint16_t drv_len = (uint16_t)(sizeof(tusb_desc_interface_t) + sizeof(tusb_hid_descriptor_hid_t) +
                                       desc_itf->bNumEndpoints * sizeof(tusb_desc_endpoint_t));
-  TU_ASSERT(drv_len <= max_len, 0);
+  // Corrupted descriptors can report wrong bNumEndpoints -- fail gracefully
+  TU_VERIFY(drv_len <= max_len, 0);
   const uint8_t *p_desc = (const uint8_t *)desc_itf;
 
   // HID descriptor: mostly right after interface descriptor, in some rare case it might be after endpoint descriptors
@@ -536,7 +537,8 @@ uint16_t hidh_open(uint8_t rhport, uint8_t daddr, const tusb_desc_interface_t *d
   } else {
     // HID after endpoint
     desc_hid = (const tusb_hid_descriptor_hid_t *)(p_desc + sizeof(tusb_desc_endpoint_t) * desc_itf->bNumEndpoints);
-    TU_ASSERT(tu_desc_type(desc_hid) == HID_DESC_TYPE_HID, 0);
+    // Corrupted descriptor data may have wrong type -- fail gracefully
+    TU_VERIFY(tu_desc_type(desc_hid) == HID_DESC_TYPE_HID, 0);
   }
 
   // Allocate new interface
@@ -548,8 +550,9 @@ uint16_t hidh_open(uint8_t rhport, uint8_t daddr, const tusb_desc_interface_t *d
   // Endpoint Descriptors
   for (uint8_t i = 0; i < desc_itf->bNumEndpoints; i++) {
     const tusb_desc_endpoint_t *desc_ep = (const tusb_desc_endpoint_t *)p_desc;
-    TU_ASSERT(TUSB_DESC_ENDPOINT == desc_ep->bDescriptorType, 0);
-    TU_ASSERT(tuh_edpt_open(daddr, desc_ep), 0);
+    // Corrupted descriptors may have unexpected types -- fail gracefully
+    TU_VERIFY(TUSB_DESC_ENDPOINT == desc_ep->bDescriptorType, 0);
+    TU_VERIFY(tuh_edpt_open(daddr, desc_ep), 0);
 
     if (tu_edpt_dir(desc_ep->bEndpointAddress) == TUSB_DIR_IN) {
       p_hid->ep_in = desc_ep->bEndpointAddress;
