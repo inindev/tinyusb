@@ -28,6 +28,7 @@
 
 #if (CFG_TUH_ENABLED && CFG_TUH_HID)
 
+#include "tusb.h"
 #include "host/usbh.h"
 #include "host/usbh_pvt.h"
 
@@ -644,6 +645,10 @@ static void process_set_config(tuh_xfer_t* xfer) {
         // Driver is mounted without report descriptor
         config_driver_mount_complete(daddr, idx, NULL, 0);
       } else {
+        // Brief pause for LS devices behind hubs before descriptor fetch
+        if (tuh_speed_get(daddr) == TUSB_SPEED_LOW) {
+          tusb_time_delay_ms_api(4);
+        }
         tuh_descriptor_get_hid_report(daddr, itf_num, p_hid->report_desc_type, 0,
                                       usbh_get_enum_buf(), p_hid->report_desc_len,
                                       process_set_config, CONFIG_COMPLETE);

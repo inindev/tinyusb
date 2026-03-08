@@ -1539,6 +1539,15 @@ enum {
   ENUM_AFTER_SET_ADDRESS_RECOVERY_DELAY,
 };
 
+// Low-speed devices behind full-speed hubs need brief pauses between
+// enumeration transactions to allow the hub to settle after preamble'd
+// transfers. 2ms is enough (one full-speed frame interval).
+static inline void enum_ls_delay(void) {
+  if (_usbh_data.dev0_bus.speed == TUSB_SPEED_LOW) {
+    tusb_time_delay_ms_api(2);
+  }
+}
+
 // process async delay in enumeration
 static void enum_delay_async(uintptr_t state) {
   tuh_bus_info_t *dev0_bus = &_usbh_data.dev0_bus;
@@ -1611,6 +1620,7 @@ static void enum_delay_async(uintptr_t state) {
       break;
 
     case ENUM_AFTER_SET_ADDRESS_RECOVERY_DELAY: {
+      enum_ls_delay();
       const uint8_t  new_addr = _usbh_data.enumerating_daddr;
       usbh_device_t *new_dev  = get_device(new_addr);
       TU_ASSERT(new_dev, );
@@ -1715,6 +1725,7 @@ static void process_enumeration(tuh_xfer_t *xfer) {
   #endif
 
     case ENUM_ADDR0_DEVICE_DESC:
+      enum_ls_delay();
       usbh_defer_func_ms_async(ENUM_RESET_RECOVERY_DELAY_MS, enum_delay_async, ENUM_AFTER_RESET_RECOVERY_DELAY);
       break;
 
@@ -1847,6 +1858,7 @@ static void process_enumeration(tuh_xfer_t *xfer) {
     }
 
     case ENUM_GET_9BYTE_CONFIG_DESC: {
+      enum_ls_delay();
       // Get 9-byte for total length
       uint8_t const config_idx = 0;
       TU_LOG_USBH("Get Configuration[%u] Descriptor (9 bytes)\r\n", config_idx);
@@ -1856,6 +1868,7 @@ static void process_enumeration(tuh_xfer_t *xfer) {
     }
 
     case ENUM_GET_FULL_CONFIG_DESC: {
+      enum_ls_delay();
       uint8_t const* desc_config = _usbh_epbuf.ctrl;
 
       // Use offsetof to avoid pointer to the odd/misaligned address
@@ -1873,6 +1886,7 @@ static void process_enumeration(tuh_xfer_t *xfer) {
     }
 
     case ENUM_SET_CONFIG: {
+      enum_ls_delay();
       uint8_t config_idx = (uint8_t) tu_le16toh(xfer->setup->wIndex);
       if (tuh_enum_descriptor_configuration_cb(daddr, config_idx, (const tusb_desc_configuration_t*) _usbh_epbuf.ctrl)) {
         TU_ASSERT(tuh_configuration_set(daddr, config_idx+1u, process_enumeration, ENUM_CONFIG_DRIVER),);
