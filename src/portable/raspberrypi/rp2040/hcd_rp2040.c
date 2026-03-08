@@ -216,10 +216,10 @@ static void __tusb_irq_path_func(hcd_rp2040_irq)(void)
 
   if ( status & USB_INTS_ERROR_DATA_SEQ_BITS )
   {
+    handled |= USB_INTS_ERROR_DATA_SEQ_BITS;
     usb_hw_clear->sie_status = USB_SIE_STATUS_DATA_SEQ_ERROR_BITS;
-    TU_LOG(3, "  Seq Error: [0] = 0x%04u  [1] = 0x%04x\r\n", tu_u32_low16(*hwbuf_ctrl_reg_host(&epx)),
-           tu_u32_high16(*hwbuf_ctrl_reg_host(&epx)));
-    panic("Data Seq Error \n");
+    TU_LOG(1, "  Data Seq Error\r\n");
+    hw_xfer_complete(&epx, XFER_RESULT_FAILED);
   }
 
   if ( status ^ handled )
