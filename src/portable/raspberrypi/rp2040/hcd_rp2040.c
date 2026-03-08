@@ -492,6 +492,11 @@ void hcd_device_close(uint8_t rhport, uint8_t dev_addr)
       usb_hw_clear->int_ep_ctrl = (1 << (ep->interrupt_num + 1));
       usb_hw->int_ep_addr_ctrl[ep->interrupt_num] = 0;
 
+      // Clear any pending buffer status for this endpoint to prevent
+      // stale interrupts after the endpoint is freed
+      uint32_t ep_mask = (1u << (i * 2)) | (1u << (i * 2 + 1));
+      usb_hw_clear->buf_status = ep_mask;
+
       // unconfigure the endpoint
       ep->configured = false;
       *ep->endpoint_control = 0;
