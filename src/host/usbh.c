@@ -1329,6 +1329,15 @@ static bool enum_request_set_addr(void);
 static bool _parse_configuration_descriptor (uint8_t dev_addr, tusb_desc_configuration_t const* desc_cfg);
 static void enum_full_complete(void);
 
+// Low-speed devices behind full-speed hubs need brief pauses between
+// enumeration transactions to allow the hub to settle after preamble'd
+// transfers. 2ms is enough (one full-speed frame interval).
+static inline void enum_ls_delay(void) {
+  if (_dev0.speed == TUSB_SPEED_LOW) {
+    tusb_time_delay_ms_api(2);
+  }
+}
+
 // process device enumeration
 static void process_enumeration(tuh_xfer_t* xfer) {
   // Retry a few times with transfers in enumeration since device can be unstable when starting up
@@ -1426,6 +1435,7 @@ static void process_enumeration(tuh_xfer_t* xfer) {
     #endif
 
     case ENUM_ADDR0_DEVICE_DESC: {
+      enum_ls_delay();
       // TODO probably doesn't need to open/close each enumeration
       uint8_t const addr0 = 0;
       if (!usbh_edpt_control_open(addr0, 8)) {
@@ -1502,6 +1512,7 @@ static void process_enumeration(tuh_xfer_t* xfer) {
       }
 
       // Get full device descriptor
+      enum_ls_delay();
       TU_LOG_USBH("Get Device Descriptor\r\n");
       if (!tuh_descriptor_get_device(new_addr, _usbh_epbuf.ctrl, sizeof(tusb_desc_device_t),
                                      process_enumeration, ENUM_GET_9BYTE_CONFIG_DESC)) {
@@ -1552,6 +1563,7 @@ static void process_enumeration(tuh_xfer_t* xfer) {
       dev->i_serial = desc_device->iSerialNumber;
 
       // Get 9-byte for total length
+      enum_ls_delay();
       uint8_t const config_idx = CONFIG_NUM - 1;
       TU_LOG_USBH("Get Configuration[0] Descriptor (9 bytes)\r\n");
       if (!tuh_descriptor_get_configuration(daddr, config_idx, _usbh_epbuf.ctrl, 9,
@@ -1578,6 +1590,7 @@ static void process_enumeration(tuh_xfer_t* xfer) {
       }
 
       // Get full configuration descriptor
+      enum_ls_delay();
       uint8_t const config_idx = CONFIG_NUM - 1;
       TU_LOG_USBH("Get Configuration[0] Descriptor\r\n");
       if (!tuh_descriptor_get_configuration(daddr, config_idx, _usbh_epbuf.ctrl, total_len,
@@ -1615,6 +1628,7 @@ static void process_enumeration(tuh_xfer_t* xfer) {
       }
       cfg_retry_count = 0;
 
+      enum_ls_delay();
       if (!tuh_configuration_set(daddr, CONFIG_NUM, process_enumeration, ENUM_CONFIG_DRIVER)) {
         TU_LOG1("Enumeration: failed to set configuration\r\n");
         enum_full_complete();

@@ -612,6 +612,10 @@ static void process_set_config(tuh_xfer_t* xfer) {
         // Clear buffer before fetch to prevent stale config descriptor data
         // from leaking through if the transfer is short
         memset(usbh_get_enum_buf(), 0, p_hid->report_desc_len);
+        // Brief pause for LS devices behind hubs before descriptor fetch
+        if (tuh_speed_get(daddr) == TUSB_SPEED_LOW) {
+          tusb_time_delay_ms_api(2);
+        }
         tuh_descriptor_get_hid_report(daddr, itf_num, p_hid->report_desc_type, 0,
                                       usbh_get_enum_buf(), p_hid->report_desc_len,
                                       process_set_config, CONFIG_COMPLETE);
