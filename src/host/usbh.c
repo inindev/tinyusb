@@ -1789,6 +1789,27 @@ static void process_enumeration(tuh_xfer_t *xfer) {
     // For string descriptor (langid, manufacturer, product, serila): always get the first 2 bytes
     // to determine the length first. otherwise, some device may have buffer overflow.
     case ENUM_GET_STRING_LANGUAGE_ID_LEN: {
+      // Retry if device descriptor transfer was short
+      // Exponential backoff: 50, 100, 200, 400, 800ms
+      static uint8_t devdesc_retry_count = 0;
+      TU_LOG1("Device desc: actual=%lu requested=%u\r\n",
+              (unsigned long)xfer->actual_len, (unsigned)sizeof(tusb_desc_device_t));
+      if (xfer->actual_len < sizeof(tusb_desc_device_t) && devdesc_retry_count < 5) {
+        devdesc_retry_count++;
+        uint32_t delay = 50u << (devdesc_retry_count - 1);
+        TU_LOG1("Device descriptor short, retry %u (%lums)\r\n",
+                devdesc_retry_count, (unsigned long)delay);
+        tusb_time_delay_ms_api(delay);
+        if (!tuh_descriptor_get_device(daddr, _usbh_epbuf.ctrl, sizeof(tusb_desc_device_t),
+                                       process_enumeration, ENUM_GET_STRING_LANGUAGE_ID_LEN)) {
+          devdesc_retry_count = 0;
+          enum_full_complete(false);
+          return;
+        }
+        break;
+      }
+      devdesc_retry_count = 0;
+
       // save the received device descriptor
       tusb_desc_device_t const *desc_device = (tusb_desc_device_t const *) _usbh_epbuf.ctrl;
 
@@ -1925,6 +1946,31 @@ static void process_enumeration(tuh_xfer_t *xfer) {
     }
 
     case ENUM_SET_CONFIG: {
+      // Retry if config descriptor transfer was short
+      // Exponential backoff: 50, 100, 200, 400, 800ms
+      static uint8_t cfg_retry_count = 0;
+      uint16_t const cfg_requested = tu_le16toh(xfer->setup->wLength);
+      TU_LOG1("Config desc: actual=%lu requested=%u first_bytes=%02X %02X %02X %02X\r\n",
+              (unsigned long)xfer->actual_len, cfg_requested,
+              _usbh_epbuf.ctrl[0], _usbh_epbuf.ctrl[1],
+              _usbh_epbuf.ctrl[2], _usbh_epbuf.ctrl[3]);
+      if (xfer->actual_len < cfg_requested && cfg_retry_count < 5) {
+        cfg_retry_count++;
+        uint32_t delay = 50u << (cfg_retry_count - 1);
+        TU_LOG1("Config descriptor short, retry %u (%lums)\r\n",
+                cfg_retry_count, (unsigned long)delay);
+        tusb_time_delay_ms_api(delay);
+        uint8_t const ci = (uint8_t) tu_le16toh(xfer->setup->wIndex);
+        if (!tuh_descriptor_get_configuration(daddr, ci, _usbh_epbuf.ctrl, cfg_requested,
+                                              process_enumeration, ENUM_SET_CONFIG)) {
+          cfg_retry_count = 0;
+          enum_full_complete(false);
+          return;
+        }
+        break;
+      }
+      cfg_retry_count = 0;
+
       enum_ls_delay();
       uint8_t config_idx = (uint8_t) tu_le16toh(xfer->setup->wIndex);
       if (tuh_enum_descriptor_configuration_cb(daddr, config_idx, (const tusb_desc_configuration_t*) _usbh_epbuf.ctrl)) {
