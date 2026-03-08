@@ -74,6 +74,7 @@ typedef struct hw_endpoint {
 
 #if CFG_TUH_ENABLED
   bool    configured;    // Is this a valid struct
+  bool    needs_pre;     // Needs preamble for low-speed device via hub
   uint8_t dev_addr;
   uint8_t interrupt_num; // for host interrupt endpoints
 #endif

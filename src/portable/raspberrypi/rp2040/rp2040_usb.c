@@ -199,7 +199,7 @@ void __tusb_irq_path_func(hw_endpoint_start_next_buffer)(struct hw_endpoint* ep)
     // NOTE: this could happen to Host mode IN endpoint Also, Host mode "interrupt" endpoint hardware is only single
     // buffered,
     // NOTE2: Currently Host bulk is implemented using "interrupt" endpoint
-    const bool force_single = (!is_host && is_rx) || (is_host && tu_edpt_number(ep->ep_addr) != 0);
+    const bool force_single = (!is_host && is_rx) || (is_host && (tu_edpt_number(ep->ep_addr) != 0 || ep->needs_pre));
 
     if (ep->remaining_len && !force_single) {
       // Use buffer 1 (double buffered) if there is still data

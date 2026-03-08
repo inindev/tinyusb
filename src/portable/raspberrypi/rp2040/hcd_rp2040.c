@@ -304,6 +304,7 @@ static void hw_endpoint_init(struct hw_endpoint *ep, uint8_t dev_addr, uint8_t e
   *ctrl_reg          = ctrl_value;
   pico_trace("endpoint control (0x%p) <- 0x%lx\n", ctrl_reg, ctrl_value);
   ep->configured = true;
+  ep->needs_pre = (dev_addr != 0) && need_pre(dev_addr);
 
   if (ep != &epx) {
     // Endpoint has its own addr_endp and interrupt bits to be setup!
