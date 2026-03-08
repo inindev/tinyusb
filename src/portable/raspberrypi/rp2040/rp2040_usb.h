@@ -89,6 +89,9 @@ typedef struct hw_endpoint
 
     // If interrupt endpoint
     uint8_t interrupt_num;
+
+    // Device needs preamble (LS behind FS hub) -- force single buffering
+    bool needs_pre;
 #endif
 
 } hw_endpoint_t;

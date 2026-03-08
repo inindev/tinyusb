@@ -164,8 +164,13 @@ void __tusb_irq_path_func(hw_endpoint_start_next_buffer)(struct hw_endpoint* ep)
   // Also, Host mode "interrupt" endpoint hardware is only single buffered,
   // NOTE2: Currently Host bulk is implemented using "interrupt" endpoint
   bool const is_host = is_host_mode();
+  // Also force single buffering for preamble'd transfers (LS device
+  // behind FS hub): the SIE only sends the PRE token before the first
+  // buffer, not the second, so the second buffer arrives without
+  // preamble and is ignored by the hub.
   bool const force_single = (!is_host && !tu_edpt_dir(ep->ep_addr)) ||
-                            (is_host && tu_edpt_number(ep->ep_addr) != 0);
+                            (is_host && tu_edpt_number(ep->ep_addr) != 0) ||
+                            (is_host && ep->needs_pre);
 
   if (ep->remaining_len && !force_single) {
     // Use buffer 1 (double buffered) if there is still data

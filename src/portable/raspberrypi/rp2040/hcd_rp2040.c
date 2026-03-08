@@ -343,6 +343,7 @@ static void _hw_endpoint_init(struct hw_endpoint *ep, uint8_t dev_addr, uint8_t 
   *ep->endpoint_control = ep_reg;
   pico_trace("endpoint control (0x%p) <- 0x%lx\n", ep->endpoint_control, ep_reg);
   ep->configured = true;
+  ep->needs_pre = (dev_addr != 0) && need_pre(dev_addr);
 
   if ( ep != &epx )
   {
