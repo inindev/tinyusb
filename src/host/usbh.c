@@ -1513,13 +1513,37 @@ static void process_enumeration(tuh_xfer_t* xfer) {
     }
 
     case ENUM_GET_9BYTE_CONFIG_DESC: {
+      static uint8_t devdesc_retry_count = 0;
       tusb_desc_device_t const* desc_device = (tusb_desc_device_t const*) _usbh_epbuf.ctrl;
       usbh_device_t* dev = get_device(daddr);
       if (!dev) {
         TU_LOG1("Enumeration: no device for addr %u at 9byte config\r\n", daddr);
+        devdesc_retry_count = 0;
         enum_full_complete();
         return;
       }
+
+      // Log actual vs requested length and VID/PID for corruption diagnosis
+      TU_LOG1("Device desc: actual=%lu requested=%u VID=%04X PID=%04X\r\n",
+              (unsigned long)xfer->actual_len, (unsigned)sizeof(tusb_desc_device_t),
+              desc_device->idVendor, desc_device->idProduct);
+
+      // Retry if device descriptor transfer was short
+      // Exponential backoff: 50, 100, 200, 400, 800ms
+      if (xfer->actual_len < sizeof(tusb_desc_device_t) && devdesc_retry_count < 5) {
+        devdesc_retry_count++;
+        uint32_t delay = 50u << (devdesc_retry_count - 1);
+        TU_LOG1("Device descriptor short, retry %u (%lums)\r\n", devdesc_retry_count, (unsigned long)delay);
+        tusb_time_delay_ms_api(delay);
+        if (!tuh_descriptor_get_device(daddr, _usbh_epbuf.ctrl, sizeof(tusb_desc_device_t),
+                                       process_enumeration, ENUM_GET_9BYTE_CONFIG_DESC)) {
+          devdesc_retry_count = 0;
+          enum_full_complete();
+          return;
+        }
+        break;
+      }
+      devdesc_retry_count = 0;
 
       dev->vid = desc_device->idVendor;
       dev->pid = desc_device->idProduct;
@@ -1565,13 +1589,39 @@ static void process_enumeration(tuh_xfer_t* xfer) {
       break;
     }
 
-    case ENUM_SET_CONFIG:
+    case ENUM_SET_CONFIG: {
+      static uint8_t cfg_retry_count = 0;
+      uint16_t const cfg_requested = tu_le16toh(xfer->setup->wLength);
+      TU_LOG1("Config desc: actual=%lu requested=%u first_bytes=%02X %02X %02X %02X\r\n",
+              (unsigned long)xfer->actual_len, cfg_requested,
+              _usbh_epbuf.ctrl[0], _usbh_epbuf.ctrl[1],
+              _usbh_epbuf.ctrl[2], _usbh_epbuf.ctrl[3]);
+
+      // Retry if config descriptor transfer was short
+      // Exponential backoff: 50, 100, 200, 400, 800ms
+      if (xfer->actual_len < cfg_requested && cfg_retry_count < 5) {
+        cfg_retry_count++;
+        uint32_t delay = 50u << (cfg_retry_count - 1);
+        TU_LOG1("Config descriptor short, retry %u (%lums)\r\n", cfg_retry_count, (unsigned long)delay);
+        tusb_time_delay_ms_api(delay);
+        uint8_t const config_idx = CONFIG_NUM - 1;
+        if (!tuh_descriptor_get_configuration(daddr, config_idx, _usbh_epbuf.ctrl, cfg_requested,
+                                              process_enumeration, ENUM_SET_CONFIG)) {
+          cfg_retry_count = 0;
+          enum_full_complete();
+          return;
+        }
+        break;
+      }
+      cfg_retry_count = 0;
+
       if (!tuh_configuration_set(daddr, CONFIG_NUM, process_enumeration, ENUM_CONFIG_DRIVER)) {
         TU_LOG1("Enumeration: failed to set configuration\r\n");
         enum_full_complete();
         return;
       }
       break;
+    }
 
     case ENUM_CONFIG_DRIVER: {
       TU_LOG_USBH("Device configured\r\n");
