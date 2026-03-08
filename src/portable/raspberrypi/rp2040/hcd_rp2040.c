@@ -434,6 +434,8 @@ void hcd_device_close(uint8_t rhport, uint8_t dev_addr) {
     *hwep_ctrl_reg_host(&epx)  = 0;
     *hwbuf_ctrl_reg_host(&epx) = 0;
     hw_endpoint_reset_transfer(&epx);
+    // Clear stale buf_status bits for epx (bits 0-1)
+    usb_hw_clear->buf_status = 0x3;
   }
 
   // dev0 only has ep0
@@ -450,6 +452,8 @@ void hcd_device_close(uint8_t rhport, uint8_t dev_addr) {
         *hwep_ctrl_reg_host(ep)  = 0;
         *hwbuf_ctrl_reg_host(ep) = 0;
         hw_endpoint_reset_transfer(ep);
+        // Clear stale buf_status bits for this interrupt endpoint
+        usb_hw_clear->buf_status = (0x3u << ((ep->interrupt_num + 1) * 2));
       }
     }
   }
