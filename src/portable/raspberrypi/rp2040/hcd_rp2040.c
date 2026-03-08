@@ -356,6 +356,13 @@ bool hcd_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
   // Enable in host mode with SOF / Keep alive on
   usb_hw->main_ctrl = USB_MAIN_CTRL_CONTROLLER_EN_BITS | USB_MAIN_CTRL_HOST_NDEVICE_BITS;
   usb_hw->sie_ctrl = SIE_CTRL_BASE;
+
+#if !PICO_RP2040
+  // Improve low-speed device timing through hubs on RP2350
+  usb_hw_set->linestate_tuning = USB_LINESTATE_TUNING_MULTI_HUB_FIX_BITS |
+                                 USB_LINESTATE_TUNING_LINESTATE_DELAY_BITS |
+                                 USB_LINESTATE_TUNING_RCV_DELAY_BITS;
+#endif
   usb_hw->inte = USB_INTE_BUFF_STATUS_BITS      |
                  USB_INTE_HOST_CONN_DIS_BITS    |
                  USB_INTE_HOST_RESUME_BITS      |
