@@ -373,7 +373,11 @@ bool __tusb_irq_path_func(hw_endpoint_xfer_continue)(struct hw_endpoint* ep) {
 
   // Part way through a transfer
   if (!ep->active) {
-    panic("Can't continue xfer on inactive ep %02X", ep->ep_addr);
+    // Stale buff_status bit for an endpoint that is no longer active.
+    // This can happen when a device is disconnected mid-transfer.
+    pico_trace("Skipping inactive ep %02X\r\n", ep->ep_addr);
+    hw_endpoint_lock_update(ep, -1);
+    return false;
   }
 
   sync_xfer(ep); // Update EP struct from hardware state
