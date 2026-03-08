@@ -567,9 +567,14 @@ bool hcd_edpt_xfer(uint8_t rhport, uint8_t dev_addr, uint8_t ep_addr, uint8_t * 
     // for host we have to initiate the transfer
     usb_hw->dev_addr_ctrl = (uint32_t) (dev_addr | (ep_num << USB_ADDR_ENDP_ENDPOINT_LSB));
 
+    // For LS devices behind a FS hub: add PREAMBLE_EN + SOF_SYNC and
+    // remove KEEP_ALIVE_EN (hub handles keep-alive to its LS ports;
+    // keep-alive on the FS upstream bus causes spurious signals).
+    bool const pre = need_pre(dev_addr);
     uint32_t flags = USB_SIE_CTRL_START_TRANS_BITS | SIE_CTRL_BASE |
                      (ep_dir ? USB_SIE_CTRL_RECEIVE_DATA_BITS : USB_SIE_CTRL_SEND_DATA_BITS) |
-                     (need_pre(dev_addr) ? USB_SIE_CTRL_PREAMBLE_EN_BITS : 0);
+                     (pre ? (USB_SIE_CTRL_PREAMBLE_EN_BITS | USB_SIE_CTRL_SOF_SYNC_BITS) : 0);
+    if (pre) flags &= ~USB_SIE_CTRL_KEEP_ALIVE_EN_BITS;
     // START_TRANS bit on SIE_CTRL seems to exhibit the same behavior as the AVAILABLE bit
     // described in RP2040 Datasheet, release 2.1, section "4.1.2.5.1. Concurrent access".
     // We write everything except the START_TRANS bit first, then wait some cycles.
@@ -619,9 +624,13 @@ bool hcd_setup_send(uint8_t rhport, uint8_t dev_addr, uint8_t const setup_packet
   // Set device address
   usb_hw->dev_addr_ctrl = dev_addr;
 
-  // Set pre if we are a low speed device on full speed hub
-  uint32_t const flags = SIE_CTRL_BASE | USB_SIE_CTRL_SEND_SETUP_BITS | USB_SIE_CTRL_START_TRANS_BITS |
-                         (need_pre(dev_addr) ? USB_SIE_CTRL_PREAMBLE_EN_BITS : 0);
+  // For LS devices behind a FS hub: add PREAMBLE_EN + SOF_SYNC and
+  // remove KEEP_ALIVE_EN (hub handles keep-alive to its LS ports;
+  // keep-alive on the FS upstream bus causes spurious signals).
+  bool const pre = need_pre(dev_addr);
+  uint32_t flags = SIE_CTRL_BASE | USB_SIE_CTRL_SEND_SETUP_BITS | USB_SIE_CTRL_START_TRANS_BITS |
+                   (pre ? (USB_SIE_CTRL_PREAMBLE_EN_BITS | USB_SIE_CTRL_SOF_SYNC_BITS) : 0);
+  if (pre) flags &= ~USB_SIE_CTRL_KEEP_ALIVE_EN_BITS;
 
   // START_TRANS bit on SIE_CTRL seems to exhibit the same behavior as the AVAILABLE bit
   // described in RP2040 Datasheet, release 2.1, section "4.1.2.5.1. Concurrent access".
