@@ -240,10 +240,15 @@ static void __tusb_irq_path_func(hcd_rp2040_irq)(void)
   if ( status & USB_INTS_ERROR_DATA_SEQ_BITS )
   {
     usb_hw_clear->sie_status = USB_SIE_STATUS_DATA_SEQ_ERROR_BITS;
-    TU_LOG(3, "  Seq Error: [0] = 0x%04u  [1] = 0x%04x\r\n",
-           tu_u32_low16(*epx.buffer_control),
-           tu_u32_high16(*epx.buffer_control));
-    panic("Data Seq Error \n");
+    handled |= USB_INTS_ERROR_DATA_SEQ_BITS;
+
+    // Per USB spec 8.6.4, a data sequence error means the DATA PID toggle
+    // is out of sync. On RP2040, this status only applies to EPX (control
+    // endpoint). Fail the EPX transfer so TinyUSB can retry or clean up.
+    if ( epx.active )
+    {
+      hw_xfer_complete(&epx, XFER_RESULT_FAILED);
+    }
   }
 
   if ( status ^ handled )
